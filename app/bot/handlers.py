@@ -2,7 +2,7 @@ import io
 import logging
 
 from aiogram import Bot, F, Router
-from aiogram.filters import CommandStart
+from aiogram.filters import Command, CommandStart
 from aiogram.types import Message
 
 from app.bot.formatting import format_post
@@ -14,10 +14,24 @@ from app.utils.parsing import CaptionParseError
 
 logger = logging.getLogger(__name__)
 router = Router()
+ACCESS_DENIED = "Нет доступа"
 FORMAT_HELP = (
     "Не удалось определить цену. Отправьте фото с подписью, например:\n"
     "Кроссовки женские 3500"
 )
+WELCOME_TEXT = (
+    "👋 Бот готов к работе.\n\n"
+    "Отправьте фотографию товара с подписью:\n"
+    "Кроссовки женские 3500\n\n"
+    "Я:\n"
+    "• определю название и цену;\n"
+    "• получу актуальный курс RUB/BYN;\n"
+    "• рассчитаю цену;\n"
+    "• сохраню фото в Google Drive;\n"
+    "• добавлю данные в Google Sheets;\n"
+    "• верну готовый пост."
+)
+GOOGLE_ERROR = "Не удалось сохранить данные. Попробуйте позже."
 
 
 def _allowed(message: Message, allowed_user_id: int) -> bool:
@@ -27,15 +41,23 @@ def _allowed(message: Message, allowed_user_id: int) -> bool:
 @router.message(CommandStart())
 async def start(message: Message, allowed_user_id: int) -> None:
     if not _allowed(message, allowed_user_id):
-        await message.answer("Нет доступа")
+        await message.answer(ACCESS_DENIED)
         return
-    await message.answer("Отправьте фотографию товара с категорией и ценой в RUB в подписи.")
+    await message.answer(WELCOME_TEXT)
+
+
+@router.message(Command("help"))
+async def help_command(message: Message, allowed_user_id: int) -> None:
+    if not _allowed(message, allowed_user_id):
+        await message.answer(ACCESS_DENIED)
+        return
+    await message.answer(WELCOME_TEXT)
 
 
 @router.message(F.photo)
 async def photo(message: Message, bot: Bot, product_service: ProductService, allowed_user_id: int) -> None:
     if not _allowed(message, allowed_user_id):
-        await message.answer("Нет доступа")
+        await message.answer(ACCESS_DENIED)
         return
     if not message.caption:
         await message.answer(FORMAT_HELP)
@@ -57,10 +79,10 @@ async def photo(message: Message, bot: Bot, product_service: ProductService, all
         await message.answer("Не удалось получить актуальный курс. Попробуйте позже.")
     except GoogleDriveError:
         logger.exception("Google Drive upload failed for message_id=%s", message.message_id)
-        await message.answer("Не удалось сохранить фотографию. Попробуйте позже.")
+        await message.answer(GOOGLE_ERROR)
     except GoogleSheetsError:
         logger.exception("Google Sheets append failed for message_id=%s", message.message_id)
-        await message.answer("Фотография загружена, но не удалось записать товар в таблицу.")
+        await message.answer(GOOGLE_ERROR)
     except Exception:
         logger.exception(
             "Telegram download or unexpected processing error, message_id=%s",
@@ -72,6 +94,6 @@ async def photo(message: Message, bot: Bot, product_service: ProductService, all
 @router.message()
 async def unsupported(message: Message, allowed_user_id: int) -> None:
     if not _allowed(message, allowed_user_id):
-        await message.answer("Нет доступа")
+        await message.answer(ACCESS_DENIED)
         return
     await message.answer(FORMAT_HELP)

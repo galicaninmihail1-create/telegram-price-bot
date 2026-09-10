@@ -8,6 +8,20 @@ from googleapiclient.errors import HttpError
 from app.domain.models import ProcessedProduct
 from app.services.google_common import GoogleCredentialProvider
 
+SHEET_COLUMNS = (
+    "created_at",
+    "telegram_message_id",
+    "category",
+    "price_rub",
+    "rub_byn_rate",
+    "base_price_byn",
+    "markup_percent",
+    "final_price_byn",
+    "drive_file_id",
+    "drive_url",
+    "status",
+)
+
 
 class GoogleSheetsError(RuntimeError):
     pass
@@ -15,6 +29,22 @@ class GoogleSheetsError(RuntimeError):
 
 def _cell(value: Decimal) -> float:
     return float(value)
+
+
+def product_to_row(product: ProcessedProduct) -> list[str | int | float]:
+    return [
+        product.created_at.isoformat(),
+        product.telegram_message_id,
+        product.category,
+        _cell(product.price_rub),
+        _cell(product.rub_byn_rate),
+        _cell(product.base_price_byn),
+        _cell(product.markup_percent),
+        _cell(product.final_price_byn),
+        product.drive_file_id,
+        product.drive_url,
+        product.status,
+    ]
 
 
 class GoogleSheetsService:
@@ -32,12 +62,7 @@ class GoogleSheetsService:
         await asyncio.to_thread(self._append_sync, product)
 
     def _append_sync(self, product: ProcessedProduct) -> None:
-        values = [[
-            product.created_at.isoformat(), product.telegram_message_id, product.category,
-            _cell(product.price_rub), _cell(product.rub_byn_rate), _cell(product.base_price_byn),
-            _cell(product.markup_percent), _cell(product.final_price_byn), product.drive_file_id,
-            product.drive_url, product.status,
-        ]]
+        values = [product_to_row(product)]
         try:
             service = build(
                 "sheets",

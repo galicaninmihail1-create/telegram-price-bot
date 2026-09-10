@@ -1,10 +1,42 @@
-# telegram-price-bot
+# Telegram Price Bot
 
 Приватный Telegram-бот для одного пользователя: принимает фотографию товара с подписью вида
 `Кроссовки женские — 3500 руб`, получает официальный курс RUB/BYN НБРБ, рассчитывает цену,
 сохраняет оригинал в Google Drive, добавляет строку в Google Sheets и возвращает готовый пост.
 
-## Требования и архитектура
+## Что делает
+
+- принимает Telegram photo + caption;
+- извлекает категорию и цену RUB без AI;
+- получает официальный RUB/BYN через API НБРБ;
+- применяет наценку и округление;
+- сохраняет фотографию в Google Drive;
+- добавляет данные в Google Sheets;
+- возвращает оформленный пост в Telegram.
+
+## Demo flow
+
+```text
+Telegram → parse → NBRB → calculation → Drive → Sheets → formatted post
+```
+
+Безопасную локальную демонстрацию без сетевых запросов можно запустить командой:
+
+```powershell
+python -m app.demo
+```
+
+## Стек
+
+- Python 3.12;
+- aiogram 3;
+- httpx;
+- Google Drive API и Google Sheets API;
+- OAuth 2.0 Desktop flow;
+- pytest;
+- Ruff.
+
+## Архитектура
 
 - Python 3.12+;
 - существующие Google Spreadsheet и папка Drive;
@@ -15,6 +47,20 @@
 не используется: для приватного MVP достаточно множества обработанных `message_id` в памяти.
 После перезапуска эта защита обнуляется; постоянную идемпотентность при необходимости лучше
 добавить отдельно (например, SQLite), не усложняя текущий сценарий.
+
+- `handlers` проверяют доступ и преобразуют Telegram update в вызов бизнес-сервиса;
+- `services` отвечают за курс, расчёт, Google Drive/Sheets и orchestration;
+- `domain` хранит типизированные модели товара и цены;
+- `google_common` централизует OAuth credentials и refresh token;
+- `config` валидирует настройки из `.env`.
+
+## Безопасность
+
+- бот обслуживает только `ALLOWED_TELEGRAM_USER_ID`;
+- `.env`, OAuth client/token и весь каталог `credentials/` исключены из Git;
+- Telegram может использовать отдельный proxy, а НБРБ принудительно подключается напрямую;
+- токены и credentials не выводятся в пользовательские ответы и INFO-логи;
+- платные AI API не используются.
 
 ## Настройка Telegram
 
@@ -94,7 +140,7 @@ python -m app.network_check
 
 Не создавайте таблицу автоматически и не коммитьте JSON-ключ.
 
-## Установка и локальный запуск
+## Запуск
 
 В каталоге проекта:
 
@@ -142,7 +188,7 @@ final_byn = base_byn * (1 + MARKUP_PERCENT / 100) + FIXED_MARKUP_BYN
 Например, `1` означает целый BYN, `0.01` — копейки, `5` — шаг в 5 BYN. Для изменения бизнес-
 формулы достаточно заменить метод `PriceCalculator.calculate` и его тесты.
 
-## Тесты и линтер
+## Тесты
 
 Тесты полностью offline: Telegram, НБРБ и Google не вызываются.
 
@@ -150,6 +196,8 @@ final_byn = base_byn * (1 + MARKUP_PERCENT / 100) + FIXED_MARKUP_BYN
 python -m pytest
 python -m ruff check .
 ```
+
+Текущий offline test suite: **49 passed**.
 
 ## Развёртывание на PythonAnywhere
 
@@ -194,3 +242,12 @@ PythonAnywhere вместо webhook можно создать Always-on task с 
 и credentials. При сбое курса запись и загрузка не начинаются; при сбое Drive таблица не меняется.
 Если Drive уже принял файл, но Sheets недоступен, бот сообщает о частичном результате — файл нужно
 проверить вручную. Полностью атомарной транзакции между независимыми Google API нет.
+
+## Что можно адаптировать под клиента
+
+- формулу расчёта и параметры наценки;
+- исходную и итоговую валюту;
+- шаблон готового поста;
+- Google Spreadsheet и worksheet;
+- папку Google Drive;
+- разрешённого Telegram-пользователя.
